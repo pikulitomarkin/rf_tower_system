@@ -363,15 +363,24 @@ def calculate_coverage_radius(
         return hi_km
 
     tolerance_km = 0.01  # 10 metros
+    max_iterations = 100
+    iteration = 0
 
-    while (hi_km - lo_km) > tolerance_km:
+    while (hi_km - lo_km) > tolerance_km and iteration < max_iterations:
+        iteration += 1
         mid_km = (lo_km + hi_km) / 2.0
         rx_dbm = rx_at(mid_km)
+
+        if math.isnan(rx_dbm):
+            rx_dbm = -999.0
 
         if rx_dbm > effective_sensitivity:
             lo_km = mid_km
         else:
             hi_km = mid_km
+
+    if iteration >= max_iterations:
+        logger.warning("Busca binária atingiu limite de %d iterações", max_iterations)
 
     return round((lo_km + hi_km) / 2.0, 3)
 

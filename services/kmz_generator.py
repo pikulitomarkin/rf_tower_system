@@ -170,32 +170,38 @@ def _build_description_html(
     operadora: str,
     sectors: List[Dict[str, Any]],
 ) -> str:
+    def _safe_val(val, fmt: Optional[str] = None) -> str:
+        if val is None:
+            return "N/D"
+        if isinstance(val, float) and math.isnan(val):
+            return "N/D"
+        try:
+            if pd.isna(val):
+                return "N/D"
+        except (TypeError, ValueError):
+            pass
+        try:
+            if fmt:
+                return fmt.format(float(val))
+            if isinstance(val, (int, float)):
+                return f"{float(val):.2f}"
+            return str(val)
+        except (ValueError, TypeError):
+            return str(val) if not pd.isna(val) else "N/D"
+
     rows_html: List[str] = []
     for sec in sectors:
-        def _v(key: str, fmt: Optional[str] = None) -> str:
-            val = sec.get(key)
-            if val is None or (isinstance(val, float) and math.isnan(val)):
-                return "N/D"
-            try:
-                if fmt:
-                    return fmt.format(float(val))
-                if isinstance(val, float):
-                    return f"{val:.2f}"
-                return str(val)
-            except (ValueError, TypeError):
-                return str(val)
-
         tech = str(sec.get("Tecnologia", "N/D"))
         rows_html.append(
             f"<tr>"
             f"<td>{tech}</td>"
-            f"<td>{_v('FreqTxMHz', '{:.3f}')}</td>"
-            f"<td>{_v('FreqRxMHz', '{:.3f}')}</td>"
-            f"<td>{_v('Azimute')}</td>"
-            f"<td>{_v('GanhoAntena', '{:.2f}')}</td>"
-            f"<td>{_v('AlturaAntena', '{:.1f}')}</td>"
-            f"<td>{_v('PotenciaTransmissorWatts', '{:.2f}')}</td>"
-            f"<td>{_v('AnguloElevacao')}</td>"
+            f"<td>{_safe_val(sec.get('FreqTxMHz'), '{:.3f}')}</td>"
+            f"<td>{_safe_val(sec.get('FreqRxMHz'), '{:.3f}')}</td>"
+            f"<td>{_safe_val(sec.get('Azimute'))}</td>"
+            f"<td>{_safe_val(sec.get('GanhoAntena'), '{:.2f}')}</td>"
+            f"<td>{_safe_val(sec.get('AlturaAntena'), '{:.1f}')}</td>"
+            f"<td>{_safe_val(sec.get('PotenciaTransmissorWatts'), '{:.2f}')}</td>"
+            f"<td>{_safe_val(sec.get('AnguloElevacao'))}</td>"
             f"</tr>"
         )
 
@@ -278,6 +284,10 @@ def generate_tower_kmz(
             f"Colunas obrigatórias ausentes no DataFrame: {', '.join(sorted(missing))}"
         )
 
+    n_stations = df["Numero Estacao"].nunique()
+    n_rows = len(df)
+    logger.info("Iniciando KMZ: %d estações, %d setores", n_stations, n_rows)
+
     temp_dir = tempfile.mkdtemp(prefix="kmz_")
     files_dir = os.path.join(temp_dir, "files")
     os.makedirs(files_dir, exist_ok=True)
@@ -288,15 +298,27 @@ def generate_tower_kmz(
         folder_cache: Dict[str, simplekml.Folder] = {}
         generated_icons: set[str] = set()
 
+        station_count = 0
         for station_id, group in df.groupby("Numero Estacao"):
+            station_count += 1
+            if station_count % 50 == 0:
+                logger.info("  KMZ progresso: %d/%d estações", station_count, n_stations)
+
             station_id_str = str(station_id)
 
             first = group.iloc[0]
-            lat = float(first["Latitude"])
-            lon = float(first["Longitude"])
+            try:
+                lat = float(first["Latitude"])
+                lon = float(first["Longitude"])
+            except (ValueError, TypeError, KeyError):
+                continue
             operadora_raw = str(first.get("Torre Estação", ""))
             endereco = str(first.get("EnderecoEstacao", ""))
-            altura = float(first["AlturaAntena"]) if not pd.isna(first.get("AlturaAntena")) else 0.0
+            try:
+                altura_raw = first.get("AlturaAntena")
+                altura = float(altura_raw) if not pd.isna(altura_raw) else 0.0
+            except (ValueError, TypeError):
+                altura = 0.0
 
             operadora_key = _resolve_operadora(operadora_raw)
             operadora_color = _resolve_operadora_color(operadora_raw)
@@ -360,9 +382,12 @@ def generate_tower_kmz(
                 arrows_folder: simplekml.Folder = tech_folder.newfolder(name=arrows_folder_name)
                 add_sector_arrows(arrows_folder, station_id_str, sectors, lat, lon)
 
-        logger.info("KML construído com %d folders únicos, salvando...", len(folder_cache))
+        logger.info("KML construído: %d pastas, %d estações. Salvando KML...",
+                    len(folder_cache), station_count)
+
         kml_path = os.path.join(temp_dir, "doc.kml")
         kml.save(kml_path)
+        logger.info("KML salvo em disco, criando KMZ...")
 
         with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as kmz:
             kmz.write(kml_path, "doc.kml")
@@ -370,7 +395,8 @@ def generate_tower_kmz(
                 fpath = os.path.join(files_dir, fname)
                 kmz.write(fpath, f"files/{fname}")
 
-        logger.info("KMZ gerado com sucesso: %s", output_path)
+        output_size = os.path.getsize(output_path)
+        logger.info("KMZ gerado: %s (%.1f KB)", output_path, output_size / 1024)
         return output_path
 
     except Exception:
