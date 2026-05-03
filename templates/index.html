@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RF Tower System — Planejamento de Torres RF</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f1923;
+            --surface: #1a2532;
+            --surface2: #22303d;
+            --border: #2d3d4f;
+            --primary: #1a9fff;
+            --primary-glow: rgba(26, 159, 255, 0.15);
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --text: #e4e8ec;
+            --text-muted: #8899aa;
+            --radius: 10px;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.25rem;
+            letter-spacing: -0.4px;
+            color: var(--primary) !important;
+        }
+
+        .main-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 1.5rem 1rem 3rem;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 1.8rem;
+        }
+        .page-header h1 {
+            font-weight: 700;
+            font-size: 1.8rem;
+            color: var(--primary);
+            margin-bottom: 0.25rem;
+        }
+        .page-header p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            max-width: 620px;
+            margin: 0 auto;
+        }
+
+        /* Tabs */
+        .nav-tabs {
+            border-bottom: 2px solid var(--border);
+            gap: 0.25rem;
+            margin-bottom: 1.5rem;
+        }
+        .nav-tabs .nav-link {
+            border: none;
+            color: var(--text-muted);
+            padding: 0.7rem 1.5rem;
+            border-radius: var(--radius) var(--radius) 0 0;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+        }
+        .nav-tabs .nav-link:hover {
+            color: var(--text);
+            background: var(--surface2);
+        }
+        .nav-tabs .nav-link.active {
+            color: var(--primary);
+            background: var(--surface);
+            border-bottom: 2px solid var(--primary);
+        }
+        .nav-tabs .nav-link i { margin-right: 0.4rem; }
+
+        /* Cards */
+        .card-dark {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+        .card-dark h5 {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text);
+        }
+
+        /* Upload zone */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 2.5rem 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s;
+            position: relative;
+            background: var(--surface2);
+        }
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: var(--primary);
+            background: var(--primary-glow);
+        }
+        .upload-zone i {
+            font-size: 3rem;
+            color: var(--primary);
+            margin-bottom: 0.75rem;
+            display: block;
+        }
+        .upload-zone .text-muted { font-size: 0.85rem; }
+        .upload-zone input[type=file] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* Buttons */
+        .btn-primary {
+            background: var(--primary);
+            border: none;
+            font-weight: 600;
+            padding: 0.55rem 1.4rem;
+            border-radius: 8px;
+        }
+        .btn-primary:hover { background: #1589db; }
+        .btn-success {
+            background: var(--success);
+            border: none;
+            font-weight: 600;
+            border-radius: 8px;
+        }
+        .btn-outline-light {
+            border-color: var(--border);
+            color: var(--text);
+            border-radius: 8px;
+        }
+        .btn-outline-light:hover {
+            background: var(--surface2);
+            color: var(--text);
+        }
+
+        /* Stats */
+        .stat-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.45rem 0.85rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin: 0.2rem;
+        }
+        .stat-badge i { color: var(--primary); }
+
+        /* Form controls */
+        .form-control, .form-select {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+            background: var(--surface2);
+            color: var(--text);
+        }
+        .form-label {
+            font-weight: 500;
+            font-size: 0.85rem;
+            margin-bottom: 0.3rem;
+            color: var(--text-muted);
+        }
+        .form-check-input:checked {
+            background-color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        /* Result */
+        .result-box {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            margin-top: 1rem;
+        }
+        .result-box pre {
+            margin: 0;
+            white-space: pre-wrap;
+            font-size: 0.8rem;
+            color: var(--text);
+            max-height: 260px;
+            overflow-y: auto;
+        }
+
+        /* Loading */
+        .spinner-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15,25,35,0.8);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .spinner-overlay.show { display: flex; }
+        .spinner-overlay .spinner-border { width: 3rem; height: 3rem; }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 9998;
+        }
+
+        footer {
+            text-align: center;
+            padding: 1.5rem;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .form-row { margin-bottom: 0.8rem; }
+
+        .highlight { color: var(--primary); font-weight: 600; }
+
+        @media (max-width: 768px) {
+            .main-container { padding: 1rem 0.5rem 2rem; }
+            .nav-tabs .nav-link { padding: 0.5rem 0.8rem; font-size: 0.82rem; }
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark" style="background:var(--surface); border-bottom:1px solid var(--border);">
+    <div class="container-fluid" style="max-width:1100px;">
+        <a class="navbar-brand" href="/">
+            <i class="fas fa-broadcast-tower"></i> RF Tower System
+        </a>
+        <div style="display:flex; gap:0.5rem;">
+            <a href="/api/kmz/template" class="btn btn-outline-light btn-sm" download>
+                <i class="fas fa-download"></i> Template Excel
+            </a>
+        </div>
+    </div>
+</nav>
+
+<div class="main-container">
+
+    <!-- Spinner -->
+    <div class="spinner-overlay" id="spinner">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-3 text-muted" id="spinner-text">Processando...</p>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastArea"></div>
+
+    <!-- Page header -->
+    <div class="page-header">
+        <h1><i class="fas fa-broadcast-tower"></i> Sistema de Planejamento de Torres RF</h1>
+        <p>Simulação de propagação RF, cálculo de link budget, exportação KMZ e geração de relatórios profissionais</p>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-kmz" data-bs-toggle="tab" data-bs-target="#panel-kmz" type="button">
+                <i class="fas fa-map-marked-alt"></i> Excel → KMZ
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-rf" data-bs-toggle="tab" data-bs-target="#panel-rf" type="button">
+                <i class="fas fa-chart-line"></i> Simulação RF
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+
+        <!-- ============ TAB 1: Excel → KMZ ============ -->
+        <div class="tab-pane fade show active" id="panel-kmz" role="tabpanel">
+
+            <div class="card-dark">
+                <h5><i class="fas fa-file-excel"></i> Upload da Planilha ANATEL</h5>
+                <div class="upload-zone" id="kmzDropZone">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <div style="font-weight:600; margin-bottom:4px;" id="kmzFileName">
+                        Arraste um arquivo Excel (.xlsx/.xls/.csv) ou clique para selecionar
+                    </div>
+                    <div class="text-muted">Formato: 19 colunas ANATEL com dados de torres e setores</div>
+                    <input type="file" id="kmzFileInput" accept=".xlsx,.xls,.csv">
+                </div>
+
+                <div class="mt-3 d-flex flex-wrap align-items-center gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="kmzShowSectors" checked>
+                        <label class="form-check-label" for="kmzShowSectors">Setas de Azimute</label>
+                    </div>
+                    <button class="btn btn-outline-light btn-sm" id="btnPreview" disabled>
+                        <i class="fas fa-search"></i> Visualizar Dados
+                    </button>
+                    <button class="btn btn-primary" id="btnGenerateKMZ" disabled>
+                        <i class="fas fa-file-export"></i> Gerar KMZ
+                    </button>
+                </div>
+
+                <div class="result-box d-none" id="previewBox" style="margin-top:1rem;">
+                    <div id="previewContent"></div>
+                </div>
+
+                <div class="d-none mt-2" id="kmzDownloadBox">
+                    <a href="#" id="kmzDownloadLink" class="btn btn-success" download>
+                        <i class="fas fa-download"></i> Baixar KMZ Gerado
+                    </a>
+                </div>
+            </div>
+
+            <div class="card-dark">
+                <h5><i class="fas fa-info-circle"></i> Como usar</h5>
+                <ol style="font-size:0.88rem; color:var(--text-muted); padding-left:1.2rem;">
+                    <li>Faça download do <a href="/api/kmz/template" class="highlight">template Excel</a> com as 19 colunas ANATEL</li>
+                    <li>Preencha com os dados das torres (uma linha por setor)</li>
+                    <li>Arraste o arquivo para a zona de upload ou clique para selecionar</li>
+                    <li>Clique em "Visualizar Dados" para conferir as estações detectadas</li>
+                    <li>Clique em "Gerar KMZ" e abra o arquivo no Google Earth</li>
+                </ol>
+            </div>
+        </div>
+
+        <!-- ============ TAB 2: Simulação RF ============ -->
+        <div class="tab-pane fade" id="panel-rf" role="tabpanel">
+
+            <div class="card-dark">
+                <h5><i class="fas fa-cogs"></i> Parâmetros da Simulação</h5>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-row">
+                            <label class="form-label">Latitude</label>
+                            <input type="number" step="any" class="form-control" id="rfLat" value="-23.5505" placeholder="ex: -23.5505">
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label">Longitude</label>
+                            <input type="number" step="any" class="form-control" id="rfLon" value="-46.6333" placeholder="ex: -46.6333">
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label">Frequência (MHz)</label>
+                            <input type="number" step="any" class="form-control" id="rfFreq" value="2100" placeholder="ex: 2100">
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label">Potência TX (Watts)</label>
+                            <input type="number" step="any" class="form-control" id="rfPower" value="20" placeholder="ex: 20">
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label">Ganho da Antena (dBi)</label>
+                            <input type="number" step="any" class="form-control" id="rfGain" value="18" placeholder="ex: 18">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-row">
+                            <label class="form-label">Altura da Torre (m)</label>
+                            <input type="number" step="any" class="form-control" id="rfHeight" value="35" placeholder="ex: 35">
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label">Azimute (graus)</label>
+                            <input type="number" step="any" class="form-control" id="rfAzimuth" value="0" placeholder="0 = Norte, 90 = Leste">
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label">Ângulo de Meia Potência (graus)</label>
+                            <input type="number" step="any" class="form-control" id="rfBeamwidth" value="65" placeholder="ex: 65">
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label">Tecnologia</label>
+                            <select class="form-select" id="rfTech">
+                                <option value="LTE" selected>LTE (4G)</option>
+                                <option value="NR">NR (5G)</option>
+                                <option value="WCDMA">WCDMA (3G)</option>
+                                <option value="GSM">GSM (2G)</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label class="form-label">Ambiente</label>
+                            <select class="form-select" id="rfEnv">
+                                <option value="urban" selected>Urbano</option>
+                                <option value="suburban">Suburbano</option>
+                                <option value="rural">Rural</option>
+                                <option value="dense_urban">Urbano Denso</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary mt-2" id="btnSimulate">
+                    <i class="fas fa-play"></i> Simular Cobertura
+                </button>
+                <button class="btn btn-outline-light mt-2 ms-2" id="btnReport" disabled>
+                    <i class="fas fa-file-pdf"></i> Gerar Relatório PDF
+                </button>
+
+                <div class="result-box d-none mt-3" id="rfResultBox">
+                    <div id="rfResultContent"></div>
+                </div>
+            </div>
+
+            <div class="card-dark">
+                <h5><i class="fas fa-file-excel"></i> Simular a Partir de Excel</h5>
+                <p style="font-size:0.88rem; color:var(--text-muted);">
+                    Faça upload de uma planilha ANATEL para simular automaticamente a cobertura de
+                    <strong>todas</strong> as torres e gerar um KMZ com os polígonos de cobertura.
+                </p>
+                <div class="upload-zone" id="rfDropZone" style="padding:1.5rem;">
+                    <i class="fas fa-upload"></i>
+                    <div style="font-weight:600;" id="rfExcelName">Clique para selecionar Excel</div>
+                    <div class="text-muted">Será gerado um KMZ com simulação de cobertura de todas as estações</div>
+                    <input type="file" id="rfFileInput" accept=".xlsx,.xls,.csv">
+                </div>
+                <button class="btn btn-primary mt-2" id="btnSimulateExcel" disabled>
+                    <i class="fas fa-rocket"></i> Simular do Excel e Baixar KMZ
+                </button>
+            </div>
+        </div>
+
+    </div><!-- /tab-content -->
+
+</div><!-- /main-container -->
+
+<footer>
+    RF Tower System &copy; 2025 &mdash; Ferramenta profissional para planejamento de redes de telecomunicações
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function() {
+    'use strict';
+
+    /* ========== HELPERS ========== */
+    const $ = s => document.querySelector(s);
+    const $$ = s => document.querySelectorAll(s);
+
+    function showSpinner(msg) {
+        $('#spinner-text').textContent = msg || 'Processando...';
+        $('#spinner').classList.add('show');
+    }
+    function hideSpinner() { $('#spinner').classList.remove('show'); }
+
+    function toast(msg, type) {
+        type = type || 'info';
+        const icons = {success:'fa-circle-check', error:'fa-circle-exclamation', info:'fa-circle-info', warning:'fa-triangle-exclamation'};
+        const colors = {success:'#2ecc71', error:'#e74c3c', info:'#1a9fff', warning:'#f39c12'};
+        const area = $('#toastArea');
+        const el = document.createElement('div');
+        el.className = 'toast align-items-center border-0';
+        el.setAttribute('role', 'alert');
+        el.style.cssText = `background:var(--surface); border:1px solid var(--border); margin-bottom:0.5rem;`;
+        el.innerHTML = `<div class="d-flex"><div class="toast-body" style="color:var(--text);">
+            <i class="fas ${icons[type]}" style="color:${colors[type]}; margin-right:0.5rem;"></i>${msg}</div>
+            <button class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;
+        area.appendChild(el);
+        new bootstrap.Toast(el, {delay:4000}).show();
+        setTimeout(() => el.remove(), 5000);
+    }
+
+    /* ========== DRAG & DROP ========== */
+    function setupDragDrop(dropZoneId, fileInputId, onFileSelected) {
+        const zone = $(dropZoneId);
+        const input = $(fileInputId);
+        if (!zone || !input) return;
+
+        ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => {
+            e.preventDefault();
+            zone.classList.add('drag-over');
+        }));
+        ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, e => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+        }));
+        zone.addEventListener('drop', e => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                input.files = files;
+                onFileSelected(files[0]);
+            }
+        });
+        input.addEventListener('change', () => {
+            if (input.files.length > 0) onFileSelected(input.files[0]);
+        });
+    }
+
+    /* ========== TAB 1: KMZ ========== */
+    let kmzSelectedFile = null;
+    let kmzSitesData = null;
+
+    setupDragDrop('#kmzDropZone', '#kmzFileInput', file => {
+        kmzSelectedFile = file;
+        $('#kmzFileName').innerHTML = `<i class="fas fa-file-excel" style="font-size:2rem;color:#2ecc71;"></i><br><strong>${file.name}</strong><br><span class="text-muted">${(file.size/1024).toFixed(1)} KB</span>`;
+        $('#btnPreview').disabled = false;
+        $('#btnGenerateKMZ').disabled = true;
+        kmzSitesData = null;
+        $('#previewBox').classList.add('d-none');
+        $('#kmzDownloadBox').classList.add('d-none');
+    });
+
+    $('#btnPreview').addEventListener('click', async () => {
+        if (!kmzSelectedFile) return;
+        showSpinner('Analisando planilha...');
+        try {
+            const fd = new FormData();
+            fd.append('excel_file', kmzSelectedFile);
+            const resp = await fetch('/api/kmz/preview', { method:'POST', body:fd });
+            const data = await resp.json();
+            if (!data.success) throw new Error(data.message);
+            kmzSitesData = data.data;
+            $('#btnGenerateKMZ').disabled = false;
+
+            const s = data.data;
+            let html = `<h6><i class="fas fa-check-circle" style="color:var(--success);"></i> Planilha Processada</h6>`;
+            html += `<div class="d-flex flex-wrap gap-2 mb-2">`;
+            html += `<span class="stat-badge"><i class="fas fa-tower-cell"></i> <strong>${s.total_stations}</strong> estações</span>`;
+            html += `<span class="stat-badge"><i class="fas fa-wifi"></i> <strong>${s.total_sectors}</strong> setores</span>`;
+            if (s.operators) html += `<span class="stat-badge"><i class="fas fa-building"></i> ${s.operators.join(', ')}</span>`;
+            if (s.technologies) html += `<span class="stat-badge"><i class="fas fa-microchip"></i> ${s.technologies.join(', ')}</span>`;
+            html += `</div>`;
+
+            if (s.stations_sample && s.stations_sample.length > 0) {
+                html += `<p class="mb-1" style="font-size:0.82rem;color:var(--text-muted);">Amostra (${Math.min(s.stations_sample.length, s.total_stations)} de ${s.total_stations}):</p>`;
+                html += `<div style="max-height:200px;overflow-y:auto;font-size:0.78rem;">`;
+                html += `<table class="table table-sm table-dark" style="--bs-table-bg:var(--surface2);margin:0;">`;
+                html += `<thead><tr><th>ID</th><th>Endereço</th><th>Setores</th><th>Coords</th></tr></thead><tbody>`;
+                for (const st of s.stations_sample) {
+                    html += `<tr><td>#${st.id}</td><td>${st.endereco||st.name||''}</td><td>${st.sectors||'?'}</td><td>${st.lat?.toFixed(4)}, ${st.lon?.toFixed(4)}</td></tr>`;
+                }
+                html += `</tbody></table></div>`;
+            }
+
+            $('#previewContent').innerHTML = html;
+            $('#previewBox').classList.remove('d-none');
+        } catch(e) {
+            toast(e.message || 'Erro ao processar planilha', 'error');
+        } finally { hideSpinner(); }
+    });
+
+    $('#btnGenerateKMZ').addEventListener('click', async () => {
+        if (!kmzSelectedFile) return;
+        showSpinner('Gerando KMZ...');
+        try {
+            const fd = new FormData();
+            fd.append('excel_file', kmzSelectedFile);
+            fd.append('show_sectors', $('#kmzShowSectors').checked ? 'true' : 'false');
+            const resp = await fetch('/api/kmz/generate', { method:'POST', body:fd });
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.message || 'Erro ao gerar KMZ');
+            }
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `torres_rf_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.kmz`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast('KMZ gerado com sucesso!', 'success');
+            $('#kmzDownloadBox').classList.remove('d-none');
+            const link = $('#kmzDownloadLink');
+            link.href = url;
+            link.download = a.download;
+        } catch(e) {
+            toast(e.message || 'Erro ao gerar KMZ', 'error');
+        } finally { hideSpinner(); }
+    });
+
+    /* ========== TAB 2: RF Simulation ========== */
+    setupDragDrop('#rfDropZone', '#rfFileInput', file => {
+        $('#rfExcelName').innerHTML = `<strong>${file.name}</strong> <span class="text-muted">(${(file.size/1024).toFixed(1)} KB)</span>`;
+        $('#btnSimulateExcel').disabled = false;
+    });
+
+    $('#btnSimulate').addEventListener('click', async () => {
+        const body = {
+            lat: parseFloat($('#rfLat').value),
+            lon: parseFloat($('#rfLon').value),
+            freq_mhz: parseFloat($('#rfFreq').value),
+            power_watts: parseFloat($('#rfPower').value),
+            gain_dbi: parseFloat($('#rfGain').value),
+            height_m: parseFloat($('#rfHeight').value),
+            azimuth_deg: parseFloat($('#rfAzimuth').value),
+            beamwidth_deg: parseFloat($('#rfBeamwidth').value),
+            technology: $('#rfTech').value,
+            environment: $('#rfEnv').value,
+        };
+        showSpinner('Simulando cobertura RF...');
+        try {
+            const resp = await fetch('/api/rf/simulate', {
+                method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+            });
+            const data = await resp.json();
+            if (!data.success) throw new Error(data.message);
+            const d = data.data;
+
+            let html = `<h6><i class="fas fa-check-circle" style="color:var(--success);"></i> Resultado da Simulação</h6>`;
+            html += `<div class="row"><div class="col-md-6">`;
+            html += `<table class="table table-sm table-dark" style="--bs-table-bg:transparent;font-size:0.85rem;">`;
+            const rows = [
+                ['Tecnologia', d.technology], ['Frequência', d.frequency_mhz+' MHz'],
+                ['Modelo', d.model_used], ['Ambiente', d.environment],
+                ['Raio de Cobertura', `<strong style="color:var(--primary);">${d.radius_km} km</strong>`],
+                ['Área de Cobertura', `${d.coverage_area_km2} km²`],
+                ['Path Loss', `${d.path_loss_db} dB`],
+                ['Potência RX (borda)', `${d.received_power_dbm} dBm`],
+                ['Sensibilidade', `${d.sensitivity_dbm} dBm`],
+                ['Pontos do Polígono', `${d.polygon_coords.length}`],
+            ];
+            rows.forEach(([k,v]) => { html += `<tr><td style="color:var(--text-muted);">${k}</td><td>${v}</td></tr>`; });
+            html += `</table></div><div class="col-md-6">`;
+            html += `<p style="font-size:0.8rem;color:var(--text-muted);">Coordenadas do polígono (primeiros 5):</p><pre style="font-size:0.7rem;">`;
+            for (let i=0; i<Math.min(5,d.polygon_coords.length); i++) {
+                const [lat, lon] = d.polygon_coords[i];
+                html += `[${lat.toFixed(5)}, ${lon.toFixed(5)}]\n`;
+            }
+            html += `...</pre></div></div>`;
+
+            $('#rfResultContent').innerHTML = html;
+            $('#rfResultBox').classList.remove('d-none');
+            $('#btnReport').disabled = false;
+            window._lastRfResult = data;
+        } catch(e) {
+            toast(e.message || 'Erro na simulação', 'error');
+        } finally { hideSpinner(); }
+    });
+
+    $('#btnReport').addEventListener('click', async () => {
+        if (!window._lastRfResult) return;
+        const d = window._lastRfResult.data;
+        const station = {
+            station_id: 'manual',
+            operadora: 'Simulação Manual',
+            endereco: `Lat ${$('#rfLat').value}, Lon ${$('#rfLon').value}`,
+            lat: parseFloat($('#rfLat').value),
+            lon: parseFloat($('#rfLon').value),
+            sectors: [{
+                azimuth: d.polygon_coords.length > 0 ? parseFloat($('#rfAzimuth').value) : 0,
+                technology: d.technology,
+                freq_mhz: d.frequency_mhz,
+                radius_km: d.radius_km,
+                beamwidth_deg: parseFloat($('#rfBeamwidth').value),
+                polygon_coords: d.polygon_coords,
+                received_power_dbm: d.received_power_dbm,
+            }]
+        };
+        showSpinner('Gerando relatório PDF...');
+        try {
+            const resp = await fetch('/api/rf/report', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({stations:[station], format:'pdf', title:'Relatório de Simulação RF'})
+            });
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.message || 'Erro ao gerar relatório');
+            }
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `relatorio_rf_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast('Relatório PDF gerado com sucesso!', 'success');
+        } catch(e) {
+            toast(e.message || 'Erro ao gerar relatório', 'error');
+        } finally { hideSpinner(); }
+    });
+
+    $('#btnSimulateExcel').addEventListener('click', async () => {
+        const fileInput = $('#rfFileInput');
+        if (!fileInput.files || fileInput.files.length === 0) return;
+        showSpinner('Simulando cobertura de todas as estações... Isso pode levar alguns segundos.');
+        try {
+            const fd = new FormData();
+            fd.append('file', fileInput.files[0]);
+            const resp = await fetch('/api/rf/simulate-from-excel', { method:'POST', body:fd });
+            if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.message || 'Erro na simulação');
+            }
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `cobertura_rf_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.kmz`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast('KMZ de cobertura gerado! Abra no Google Earth.', 'success');
+        } catch(e) {
+            toast(e.message || 'Erro na simulação', 'error');
+        } finally { hideSpinner(); }
+    });
+
+})();
+</script>
+</body>
+</html>

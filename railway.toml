@@ -1,0 +1,9 @@
+[build]
+  [build.nixpacks]
+    nixpacksVersion = "1.30.0"
+
+[deploy]
+  numReplicas = 1
+  restartPolicyType = "ON_FAILURE"
+  sleepApplication = false
+  healthcheckPath = "/health"

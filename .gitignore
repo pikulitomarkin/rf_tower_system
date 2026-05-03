@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+*.egg
+
+# Virtualenv
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Projeto
+uploads/*
+!uploads/.gitkeep
+*.kmz
+*.pdf
+*.docx
+*.xlsx
+
+# Testes
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# Env
+.env
+.env.*
+!.env.example
