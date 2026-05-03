@@ -359,9 +359,17 @@ def generate_report():
         return jsonify({'success': False, 'error': 'invalid_format',
                         'message': 'Formato deve ser "pdf" ou "docx".'}), 400
 
-    if not stations_data:
+    if not stations_data or not isinstance(stations_data, list):
         return jsonify({'success': False, 'error': 'missing_data',
                         'message': 'Forneça uma lista de "stations".'}), 400
+
+    for st in stations_data:
+        if not isinstance(st, dict):
+            continue
+        if 'lat' not in st:
+            st['lat'] = st.get('latitude', 0)
+        if 'lon' not in st:
+            st['lon'] = st.get('longitude', 0)
 
     report_path = None
     try:
@@ -381,11 +389,15 @@ def generate_report():
         return send_file(report_path, mimetype=mime, as_attachment=True, download_name=output_fn)
 
     except ValueError as e:
+        current_app.logger.error(f'Erro de validação no relatório: {e}')
         return jsonify({'success': False, 'error': 'report_error', 'message': str(e)}), 422
     except Exception as e:
         current_app.logger.error(f'Erro ao gerar relatório: {e}', exc_info=True)
-        return jsonify({'success': False, 'error': 'report_generation_error',
-                        'message': 'Erro ao gerar o relatório.'}), 500
+        return jsonify({
+            'success': False,
+            'error': 'report_generation_error',
+            'message': f'Erro ao gerar o relatório: {str(e)}'
+        }), 500
 
 
 # ---------------------------------------------------------------------------

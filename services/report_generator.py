@@ -54,8 +54,13 @@ def _safe_str(val: Any, fmt: Optional[str] = None) -> str:
     if val is None or (isinstance(val, float) and math.isnan(val)):
         return "N/D"
     try:
+        if isinstance(val, str):
+            num = float(val) if val.strip() else None
+            if num is None:
+                return val
+            val = num
         if fmt:
-            return fmt.format(float(val) if isinstance(val, (int, float, str)) else val)
+            return fmt.format(float(val))
         if isinstance(val, float):
             return f"{val:.2f}"
         return str(val)
@@ -66,22 +71,40 @@ def _safe_str(val: Any, fmt: Optional[str] = None) -> str:
 def _build_ascii_azimuth_map(sectors: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
     for sec in sectors:
-        az = float(sec.get("azimuth", sec.get("Azimute", 0))) % 360
+        raw_az = sec.get("azimuth", sec.get("Azimute", 0))
+        try:
+            az = float(raw_az) % 360 if raw_az is not None else 0
+        except (ValueError, TypeError):
+            az = 0
+
         tech = str(sec.get("technology", sec.get("Tecnologia", "?"))).upper()
-        radius = sec.get("radius_km", sec.get("Raio", "?"))
-        radius_str = f"{float(radius):.1f}km" if not isinstance(radius, str) else radius
+        raw_radius = sec.get("radius_km", sec.get("Raio", None))
+        if raw_radius is None:
+            radius_str = "N/D"
+        elif isinstance(raw_radius, str) and raw_radius.strip() in ("", "?", "N/A", "N/D"):
+            radius_str = raw_radius.strip() if raw_radius.strip() else "N/D"
+        elif isinstance(raw_radius, str):
+            try:
+                radius_str = f"{float(raw_radius):.1f}km"
+            except (ValueError, TypeError):
+                radius_str = str(raw_radius)
+        else:
+            try:
+                radius_str = f"{float(raw_radius):.1f}km"
+            except (ValueError, TypeError):
+                radius_str = "N/D"
 
         if 0 <= az < 45:
-            d = "N  ↑"
+            d = "N"
         elif 45 <= az < 135:
-            d = "E  →"
+            d = "E"
         elif 135 <= az < 225:
-            d = "S  ↓"
+            d = "S"
         elif 225 <= az < 315:
-            d = "W  ←"
+            d = "W"
         else:
-            d = "N  ↑"
-        lines.append(f"  {tech:6s} Az={az:3.0f}° {d}  R={radius_str}")
+            d = "N"
+        lines.append(f"  {tech:6s} Az={az:3.0f} deg {d:1s}  R={radius_str}")
     return "\n".join(lines)
 
 
