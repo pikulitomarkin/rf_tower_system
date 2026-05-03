@@ -6,11 +6,11 @@ import math
 import os
 import shutil
 import tempfile
+import xml.sax.saxutils as saxutils
 import zipfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
-import simplekml
 from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,25 @@ ARROW_COLORS_KML: Dict[str, str] = {
     "WCDMA": "ffff0000",
 }
 
+KML_HEADER = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>RF Tower System - ANATEL</name>
+  <open>1</open>
+"""
+
+KML_FOOTER = """</Document>
+</kml>"""
+
+
+def _xml_escape(text: str) -> str:
+    return saxutils.escape(str(text))
+
+
+def _make_icon_filename(operadora: str, tecnologia: str) -> str:
+    safe_op = operadora.replace(" ", "_").replace(".", "").lower()
+    return f"icon_{safe_op}_{tecnologia.lower()}.png"
+
 
 def _resolve_operadora(nome: Optional[str]) -> str:
     if not nome:
@@ -71,25 +90,9 @@ def _resolve_tecnologia(raw: Optional[str]) -> str:
     return "GSM"
 
 
-def _make_style_id(operadora: str, tecnologia: str) -> str:
-    safe_op = operadora.replace(" ", "_").replace(".", "")
-    return f"{safe_op}_{tecnologia}"
-
-
-def _make_icon_filename(operadora: str, tecnologia: str) -> str:
-    safe_op = operadora.replace(" ", "_").replace(".", "").lower()
-    return f"icon_{safe_op}_{tecnologia.lower()}.png"
-
-
-# ---------------------------------------------------------------------------
-# 4 FUNÇÕES PRINCIPAIS
-# ---------------------------------------------------------------------------
-
-
 def create_colored_icon_png(color_hex: str, letter: str, size: int = 64) -> bytes:
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
     margin = 4
     draw.ellipse(
         [margin, margin, size - margin, size - margin],
@@ -97,7 +100,6 @@ def create_colored_icon_png(color_hex: str, letter: str, size: int = 64) -> byte
         outline="white",
         width=2,
     )
-
     text = letter[:1].upper()
     bbox = draw.textbbox((0, 0), text)
     tw = bbox[2] - bbox[0]
@@ -105,7 +107,6 @@ def create_colored_icon_png(color_hex: str, letter: str, size: int = 64) -> byte
     x = (size - tw) // 2
     y = (size - th) // 2 - 1
     draw.text((x, y), text, fill="white")
-
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
@@ -118,7 +119,6 @@ def calculate_endpoint(
     lon_rad = math.radians(lon)
     az_rad = math.radians(azimuth_deg)
     angular_dist = distance_m / _EARTH_RADIUS_M
-
     lat2_rad = math.asin(
         math.sin(lat_rad) * math.cos(angular_dist)
         + math.cos(lat_rad) * math.sin(angular_dist) * math.cos(az_rad)
@@ -127,74 +127,38 @@ def calculate_endpoint(
         math.sin(az_rad) * math.sin(angular_dist) * math.cos(lat_rad),
         math.cos(angular_dist) - math.sin(lat_rad) * math.sin(lat2_rad),
     )
-
     return (math.degrees(lat2_rad), math.degrees(lon2_rad))
 
 
-def add_sector_arrows(
-    folder: simplekml.Folder,
-    station_id: str,
-    sectors: List[Dict[str, Any]],
-    base_lat: float,
-    base_lon: float,
-) -> None:
-    arrow_distance_m = 300.0
-
-    for i, sec in enumerate(sectors):
-        az = sec.get("Azimute")
-        if az is None or (isinstance(az, float) and math.isnan(az)):
-            continue
-        try:
-            az_deg = float(az)
-        except (ValueError, TypeError):
-            continue
-
-        end_lat, end_lon = calculate_endpoint(base_lat, base_lon, az_deg, arrow_distance_m)
-
-        tech = _resolve_tecnologia(str(sec.get("Tecnologia", "")))
-        line_color = ARROW_COLORS_KML.get(tech, "ffffffff")
-
-        ls = folder.newlinestring(
-            name=f"{station_id} - Setor {i + 1} ({az_deg:.0f}°)",
-            coords=[(base_lon, base_lat), (end_lon, end_lat)],
-        )
-        ls.style.linestyle.color = line_color
-        ls.style.linestyle.width = 2
-        ls.altitudemode = simplekml.AltitudeMode.clamptoground
-        ls.style.linestyle.color = line_color
+def _safe_val(val, fmt: Optional[str] = None) -> str:
+    if val is None:
+        return "N/D"
+    if isinstance(val, float) and math.isnan(val):
+        return "N/D"
+    try:
+        if pd.isna(val):
+            return "N/D"
+    except (TypeError, ValueError):
+        pass
+    try:
+        if fmt:
+            return fmt.format(float(val))
+        if isinstance(val, (int, float)):
+            return f"{float(val):.2f}"
+        return str(val)
+    except (ValueError, TypeError):
+        return "N/D"
 
 
 def _build_description_html(
-    station_id: str,
-    endereco: str,
-    operadora: str,
-    sectors: List[Dict[str, Any]],
+    station_id: str, endereco: str, operadora: str, sectors: List[Dict[str, Any]]
 ) -> str:
-    def _safe_val(val, fmt: Optional[str] = None) -> str:
-        if val is None:
-            return "N/D"
-        if isinstance(val, float) and math.isnan(val):
-            return "N/D"
-        try:
-            if pd.isna(val):
-                return "N/D"
-        except (TypeError, ValueError):
-            pass
-        try:
-            if fmt:
-                return fmt.format(float(val))
-            if isinstance(val, (int, float)):
-                return f"{float(val):.2f}"
-            return str(val)
-        except (ValueError, TypeError):
-            return str(val) if not pd.isna(val) else "N/D"
-
     rows_html: List[str] = []
     for sec in sectors:
         tech = str(sec.get("Tecnologia", "N/D"))
         rows_html.append(
             f"<tr>"
-            f"<td>{tech}</td>"
+            f"<td>{_safe_val(sec.get('Tecnologia'))}</td>"
             f"<td>{_safe_val(sec.get('FreqTxMHz'), '{:.3f}')}</td>"
             f"<td>{_safe_val(sec.get('FreqRxMHz'), '{:.3f}')}</td>"
             f"<td>{_safe_val(sec.get('Azimute'))}</td>"
@@ -204,17 +168,16 @@ def _build_description_html(
             f"<td>{_safe_val(sec.get('AnguloElevacao'))}</td>"
             f"</tr>"
         )
-
     return (
         f'<![CDATA['
-        f'<h3>#{station_id} &mdash; {endereco}</h3>'
-        f'<p><b>Operadora:</b> {operadora}</p>'
+        f'<h3>#{station_id} &mdash; {_xml_escape(endereco)}</h3>'
+        f'<p><b>Operadora:</b> {_xml_escape(operadora)}</p>'
         f'<table border="1" cellpadding="4" cellspacing="0" '
         f'style="border-collapse:collapse;font-size:12px;">'
         f'<tr style="background:#1a73e8;color:white;">'
         f'<th>Tecnologia</th><th>Freq Tx (MHz)</th><th>Freq Rx (MHz)</th>'
         f'<th>Azimute</th><th>Ganho (dBi)</th><th>Altura (m)</th>'
-        f'<th>Potência (W)</th><th>Elevação</th>'
+        f'<th>Potencia (W)</th><th>Elevação</th>'
         f'</tr>'
         f'{"".join(rows_html)}'
         f'</table>'
@@ -222,8 +185,60 @@ def _build_description_html(
     )
 
 
-def _normalize_kwargs(df: pd.DataFrame) -> pd.DataFrame:
+def _build_placemark_xml(
+    name: str,
+    lon: float,
+    lat: float,
+    altura: float,
+    icon_href: str,
+    icon_scale: float,
+    description: str,
+) -> str:
+    return (
+        f'<Placemark>\n'
+        f'  <name>{_xml_escape(name)}</name>\n'
+        f'  <description>{description}</description>\n'
+        f'  <Style>\n'
+        f'    <IconStyle>\n'
+        f'      <scale>{icon_scale}</scale>\n'
+        f'      <Icon><href>{icon_href}</href></Icon>\n'
+        f'    </IconStyle>\n'
+        f'    <LabelStyle><scale>0.8</scale></LabelStyle>\n'
+        f'  </Style>\n'
+        f'  <Point>\n'
+        f'    <altitudeMode>clampToGround</altitudeMode>\n'
+        f'    <coordinates>{lon},{lat},{altura}</coordinates>\n'
+        f'  </Point>\n'
+        f'</Placemark>\n'
+    )
 
+
+def _build_arrow_linestring_xml(
+    name: str,
+    base_lon: float,
+    base_lat: float,
+    end_lon: float,
+    end_lat: float,
+    line_color: str,
+) -> str:
+    return (
+        f'<Placemark>\n'
+        f'  <name>{_xml_escape(name)}</name>\n'
+        f'  <Style>\n'
+        f'    <LineStyle>\n'
+        f'      <color>{line_color}</color>\n'
+        f'      <width>2</width>\n'
+        f'    </LineStyle>\n'
+        f'  </Style>\n'
+        f'  <LineString>\n'
+        f'    <altitudeMode>clampToGround</altitudeMode>\n'
+        f'    <coordinates>{base_lon},{base_lat} {end_lon},{end_lat}</coordinates>\n'
+        f'  </LineString>\n'
+        f'</Placemark>\n'
+    )
+
+
+def _normalize_kwargs(df: pd.DataFrame) -> pd.DataFrame:
     COLUMN_ALIASES: Dict[str, List[str]] = {
         "Torre Estação": ["operadora", "name", "Torre Estação"],
         "Numero Estacao": ["numero_estacao", "Numero Estacao"],
@@ -245,7 +260,6 @@ def _normalize_kwargs(df: pd.DataFrame) -> pd.DataFrame:
         "Latitude": ["latitude", "lat", "Latitude"],
         "Longitude": ["longitude", "lon", "lon_gms", "Longitude"],
     }
-
     for target, aliases in COLUMN_ALIASES.items():
         if target in df.columns:
             continue
@@ -253,7 +267,6 @@ def _normalize_kwargs(df: pd.DataFrame) -> pd.DataFrame:
             if alias in df.columns:
                 df[target] = df[alias]
                 break
-
     return df
 
 
@@ -293,27 +306,28 @@ def generate_tower_kmz(
     os.makedirs(files_dir, exist_ok=True)
 
     try:
-        kml = simplekml.Kml(name="RF Tower System - ANATEL")
-
-        folder_cache: Dict[str, simplekml.Folder] = {}
+        folder_placemarks: Dict[str, List[str]] = {}
         generated_icons: set[str] = set()
+        icon_files: Dict[str, bytes] = {}
 
         station_count = 0
         for station_id, group in df.groupby("Numero Estacao"):
             station_count += 1
-            if station_count % 50 == 0:
+            if station_count % 1000 == 0:
                 logger.info("  KMZ progresso: %d/%d estações", station_count, n_stations)
 
             station_id_str = str(station_id)
-
             first = group.iloc[0]
+
             try:
                 lat = float(first["Latitude"])
                 lon = float(first["Longitude"])
             except (ValueError, TypeError, KeyError):
                 continue
+
             operadora_raw = str(first.get("Torre Estação", ""))
             endereco = str(first.get("EnderecoEstacao", ""))
+
             try:
                 altura_raw = first.get("AlturaAntena")
                 altura = float(altura_raw) if not pd.isna(altura_raw) else 0.0
@@ -343,57 +357,82 @@ def generate_tower_kmz(
             for sec in sectors:
                 tech = _resolve_tecnologia(str(sec.get("Tecnologia", "")))
                 technologies_in_tower.add(tech)
-
             tech_primary = sorted(technologies_in_tower)[0] if technologies_in_tower else "GSM"
 
             icon_filename = _make_icon_filename(operadora_key, tech_primary)
+            icon_href = f"files/{icon_filename}"
             if icon_filename not in generated_icons:
-                icon_png = create_colored_icon_png(
+                icon_files[icon_filename] = create_colored_icon_png(
                     operadora_color,
                     TECNOLOGIA_LETTERS.get(tech_primary, "?"),
                 )
-                icon_path = os.path.join(files_dir, icon_filename)
-                with open(icon_path, "wb") as fh:
-                    fh.write(icon_png)
                 generated_icons.add(icon_filename)
 
-            op_cache_key = f"op:{operadora_key}"
-            if op_cache_key not in folder_cache:
-                folder_cache[op_cache_key] = kml.newfolder(name=operadora_key)
-            op_folder = folder_cache[op_cache_key]
-
-            tech_cache_key = f"tech:{operadora_key}:{tech_primary}"
-            if tech_cache_key not in folder_cache:
-                folder_cache[tech_cache_key] = op_folder.newfolder(name=tech_primary)
-            tech_folder = folder_cache[tech_cache_key]
+            folder_key = f"{operadora_key}/{tech_primary}"
+            if folder_key not in folder_placemarks:
+                folder_placemarks[folder_key] = []
 
             placemark_name = f"#{station_id_str} - {endereco}"
-            pnt = tech_folder.newpoint(name=placemark_name, coords=[(lon, lat, altura)])
-            pnt.style.iconstyle.icon.href = f"files/{icon_filename}"
-            pnt.style.iconstyle.scale = ICON_SCALE_BY_TECH.get(tech_primary, 1.0)
-            pnt.style.labelstyle.scale = 0.8
-            pnt.description = _build_description_html(
-                station_id_str, endereco, operadora_raw, sectors
-            )
-            pnt.altitudemode = simplekml.AltitudeMode.clamptoground
+            icon_scale = ICON_SCALE_BY_TECH.get(tech_primary, 1.0)
+            desc = _build_description_html(station_id_str, endereco, operadora_raw, sectors)
+
+            xml = _build_placemark_xml(placemark_name, lon, lat, altura, icon_href, icon_scale, desc)
+            folder_placemarks[folder_key].append(xml)
 
             if show_sectors and sectors:
-                arrows_folder_name = f"Setores_{station_id_str}"
-                arrows_folder: simplekml.Folder = tech_folder.newfolder(name=arrows_folder_name)
-                add_sector_arrows(arrows_folder, station_id_str, sectors, lat, lon)
+                arrow_distance_m = 300.0
+                for i, sec in enumerate(sectors):
+                    az = sec.get("Azimute")
+                    if az is None or (isinstance(az, float) and math.isnan(az)):
+                        continue
+                    try:
+                        az_deg = float(az)
+                    except (ValueError, TypeError):
+                        continue
+                    end_lat, end_lon = calculate_endpoint(lat, lon, az_deg, arrow_distance_m)
+                    tech = _resolve_tecnologia(str(sec.get("Tecnologia", "")))
+                    line_color = ARROW_COLORS_KML.get(tech, "ffffffff")
+                    arrow_name = f"{station_id_str} - Setor {i + 1} ({az_deg:.0f} deg)"
+                    arrow_xml = _build_arrow_linestring_xml(
+                        arrow_name, lon, lat, end_lon, end_lat, line_color
+                    )
+                    folder_placemarks[folder_key].append(arrow_xml)
 
-        logger.info("KML construído: %d pastas, %d estações. Salvando KML...",
-                    len(folder_cache), station_count)
+        logger.info("KML construído: %d pastas, %d estações. Gravando KML...",
+                    len(folder_placemarks), station_count)
 
         kml_path = os.path.join(temp_dir, "doc.kml")
-        kml.save(kml_path)
-        logger.info("KML salvo em disco, criando KMZ...")
+        with open(kml_path, "w", encoding="utf-8") as f:
+            f.write(KML_HEADER)
+
+            for folder_key in sorted(folder_placemarks.keys()):
+                parts = folder_key.split("/", 1)
+                op_name = parts[0]
+                tech_name = parts[1] if len(parts) > 1 else "GSM"
+                placemarks = folder_placemarks[folder_key]
+
+                f.write(f'<Folder>\n  <name>{_xml_escape(op_name)}</name>\n')
+                f.write(f'  <Folder>\n    <name>{_xml_escape(tech_name)}</name>\n')
+
+                chunk: List[str] = []
+                for pm in placemarks:
+                    chunk.append(pm)
+                    if len(chunk) >= 500:
+                        f.write("".join(chunk))
+                        chunk.clear()
+                if chunk:
+                    f.write("".join(chunk))
+
+                f.write(f'  </Folder>\n</Folder>\n')
+
+            f.write(KML_FOOTER)
+
+        logger.info("KML gravado em disco, criando KMZ...")
 
         with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as kmz:
             kmz.write(kml_path, "doc.kml")
-            for fname in os.listdir(files_dir):
-                fpath = os.path.join(files_dir, fname)
-                kmz.write(fpath, f"files/{fname}")
+            for fname, data in icon_files.items():
+                kmz.writestr(f"files/{fname}", data)
 
         output_size = os.path.getsize(output_path)
         logger.info("KMZ gerado: %s (%.1f KB)", output_path, output_size / 1024)
