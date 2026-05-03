@@ -1,6 +1,7 @@
 import math
 import os
 import tempfile
+import traceback
 import uuid
 from datetime import datetime
 
@@ -25,11 +26,13 @@ def _allowed_file(filename):
 
 
 def _save_uploaded_file(file_storage):
+    upload_dir = current_app.config['UPLOAD_FOLDER']
+    os.makedirs(upload_dir, exist_ok=True)
     unique_id = str(uuid.uuid4())
     original_name = secure_filename(file_storage.filename)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     filename = f"{timestamp}_{unique_id}_{original_name}"
-    filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+    filepath = os.path.join(upload_dir, filename)
     file_storage.save(filepath)
     return filepath
 
@@ -39,7 +42,7 @@ def _cleanup_file(filepath):
         if filepath and os.path.exists(filepath):
             os.remove(filepath)
     except OSError as e:
-        current_app.logger.warning(f'Falha ao remover arquivo temporário {filepath}: {e}')
+        current_app.logger.warning('Falha ao remover arquivo temporário %s: %s', filepath, e)
 
 
 def _watts_to_dbm(watts):
@@ -48,55 +51,74 @@ def _watts_to_dbm(watts):
     return round(10.0 * math.log10(watts * 1000.0), 2)
 
 
+def _safe_float(val, default=None):
+    if val is None:
+        return default
+    try:
+        return float(val) if not pd.isna(val) else default
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_int(val, default=0):
+    if val is None:
+        return default
+    try:
+        return int(val) if not pd.isna(val) else default
+    except (ValueError, TypeError):
+        return default
+
+
 def _dataframe_to_sites(df):
     sites = []
     for _, row in df.iterrows():
-        site = {
-            'name': str(row.get('Torre Estação', '')),
-            'lat': float(row['Latitude']),
-            'lon': float(row['Longitude']),
-            'latitude': float(row['Latitude']),
-            'longitude': float(row['Longitude']),
-            'technology': str(row.get('Tecnologia', '')),
-            'operadora': str(row.get('Torre Estação', '')),
-            'numero_estacao': str(row.get('Numero Estacao', '')),
-            'endereco': str(row.get('EnderecoEstacao', '')),
-            'uf': str(row.get('SiglaUf', '')),
-            'designacao_emissao': str(row.get('DesignacaoEmissao', '')),
-            'freq_tx_mhz': float(row['FreqTxMHz']) if not pd.isna(row.get('FreqTxMHz')) else None,
-            'freq_rx_mhz': float(row['FreqRxMHz']) if not pd.isna(row.get('FreqRxMHz')) else None,
-            'azimuth': int(row['Azimute']) if not pd.isna(row.get('Azimute')) else 0,
-            'antenna_gain_dbi': float(row['GanhoAntena']) if not pd.isna(row.get('GanhoAntena')) else 0.0,
-            'frente_costa_db': float(row['FrenteCostaAntena']) if not pd.isna(row.get('FrenteCostaAntena')) else None,
-            'beam_width_deg': float(row['AnguloMeiaPotenciaAntena']) if not pd.isna(row.get('AnguloMeiaPotenciaAntena')) else None,
-            'tilt': int(row['AnguloElevacao']) if not pd.isna(row.get('AnguloElevacao')) else 0,
-            'polarizacao': str(row.get('Polarizacao', '')),
-            'tx_height_m': float(row['AlturaAntena']) if not pd.isna(row.get('AlturaAntena')) else 0.0,
-            'cod_equipamento': str(row.get('CodEquipamentoTransmissor', '')),
-            'tx_power_dbm': _watts_to_dbm(float(row['PotenciaTransmissorWatts'])) if not pd.isna(row.get('PotenciaTransmissorWatts')) else 0.0,
-            'tx_power_watts': float(row['PotenciaTransmissorWatts']) if not pd.isna(row.get('PotenciaTransmissorWatts')) else None,
-            'frequency_mhz': float(row['FreqTxMHz']) if not pd.isna(row.get('FreqTxMHz')) else None,
-            'placemark_description': None,
-            'icon_config': None,
-        }
-        operadora = site['operadora']
-        tecnologia = site['technology']
-        site['icon_config'] = get_icon_config(operadora, tecnologia)
-        site['placemark_description'] = build_placemark_description(row)
+        try:
+            site = {
+                'name': str(row.get('Torre Estação', '')),
+                'lat': _safe_float(row.get('Latitude'), 0),
+                'lon': _safe_float(row.get('Longitude'), 0),
+                'latitude': _safe_float(row.get('Latitude'), 0),
+                'longitude': _safe_float(row.get('Longitude'), 0),
+                'technology': str(row.get('Tecnologia', '')),
+                'operadora': str(row.get('Torre Estação', '')),
+                'numero_estacao': str(row.get('Numero Estacao', '')),
+                'endereco': str(row.get('EnderecoEstacao', '')),
+                'uf': str(row.get('SiglaUf', '')),
+                'designacao_emissao': str(row.get('DesignacaoEmissao', '')),
+                'freq_tx_mhz': _safe_float(row.get('FreqTxMHz')),
+                'freq_rx_mhz': _safe_float(row.get('FreqRxMHz')),
+                'azimuth': _safe_int(row.get('Azimute'), 0),
+                'antenna_gain_dbi': _safe_float(row.get('GanhoAntena'), 0.0),
+                'frente_costa_db': _safe_float(row.get('FrenteCostaAntena')),
+                'beam_width_deg': _safe_float(row.get('AnguloMeiaPotenciaAntena')),
+                'tilt': _safe_int(row.get('AnguloElevacao'), 0),
+                'polarizacao': str(row.get('Polarizacao', '')),
+                'tx_height_m': _safe_float(row.get('AlturaAntena'), 0.0),
+                'cod_equipamento': str(row.get('CodEquipamentoTransmissor', '')),
+                'tx_power_dbm': _watts_to_dbm(_safe_float(row.get('PotenciaTransmissorWatts'), 0)),
+                'tx_power_watts': _safe_float(row.get('PotenciaTransmissorWatts')),
+                'frequency_mhz': _safe_float(row.get('FreqTxMHz')),
+                'placemark_description': None,
+                'icon_config': None,
+            }
+        except Exception as exc:
+            current_app.logger.warning('Linha ignorada na conversão: %s', exc)
+            continue
+
+        try:
+            operadora = site['operadora']
+            tecnologia = site['technology']
+            site['icon_config'] = get_icon_config(operadora, tecnologia)
+            site['placemark_description'] = build_placemark_description(row)
+        except Exception as exc:
+            current_app.logger.warning('Falha ao gerar description/icon: %s', exc)
+
         sites.append(site)
+
+    if not sites:
+        raise ValueError('Nenhum site pôde ser processado. Verifique os dados da planilha.')
+
     return sites
-
-
-def _process_excel_file(file_storage):
-    excel_path = _save_uploaded_file(file_storage)
-    try:
-        df = parse_excel(excel_path)
-        stations = group_by_station(df)
-        sites = _dataframe_to_sites(df)
-        return df, stations, sites, excel_path
-    except Exception:
-        _cleanup_file(excel_path)
-        raise
 
 
 def _calculate_bounds(sites):
@@ -114,28 +136,30 @@ def _calculate_bounds(sites):
     }
 
 
-# ---------------------------------------------------------------------------
+def _error_response(msg, error_code, status):
+    data = {'success': False, 'error': error_code, 'message': msg}
+    if current_app.config.get('DEBUG'):
+        data['traceback'] = traceback.format_exc()[-2000:]
+    return jsonify(data), status
+
+
+# =====================================================================
 # POST /api/kmz/upload
-# ---------------------------------------------------------------------------
+# =====================================================================
 
 @kmz_bp.route('/upload', methods=['POST'])
 def upload_excel():
     if 'file' not in request.files:
-        return jsonify({
-            'success': False,
-            'error': 'no_file',
-            'message': 'Nenhum arquivo foi enviado na requisição.'
-        }), 400
+        return jsonify({'success': False, 'error': 'no_file',
+                        'message': 'Nenhum arquivo foi enviado.'}), 400
 
     file = request.files['file']
     if file.filename == '':
         return jsonify({'success': False, 'error': 'empty_filename',
                         'message': 'O nome do arquivo está vazio.'}), 400
     if not _allowed_file(file.filename):
-        return jsonify({
-            'success': False, 'error': 'invalid_file_type',
-            'message': f'Extensões aceitas: {", ".join(current_app.config["ALLOWED_EXTENSIONS"])}'
-        }), 400
+        return jsonify({'success': False, 'error': 'invalid_file_type',
+                        'message': f'Extensões aceitas: {", ".join(current_app.config["ALLOWED_EXTENSIONS"])}'}), 400
 
     excel_path = None
     try:
@@ -144,7 +168,7 @@ def upload_excel():
         stations = group_by_station(df)
         sites_data = _dataframe_to_sites(df)
 
-        current_app.logger.info('Planilha processada: %d sites, %d estações', len(sites_data), len(stations))
+        current_app.logger.info('Upload processado: %d sites, %d estações', len(sites_data), len(stations))
         return jsonify({
             'success': True,
             'message': 'Planilha processada com sucesso.',
@@ -154,84 +178,87 @@ def upload_excel():
                 'sites': sites_data,
                 'stations': stations,
                 'columns_detected': list(df.columns),
-                'filename': secure_filename(file.filename)
+                'filename': secure_filename(file.filename),
             }
         }), 200
-
     except FileNotFoundError as e:
         return jsonify({'success': False, 'error': 'file_not_found', 'message': str(e)}), 404
     except ValueError as e:
         return jsonify({'success': False, 'error': 'validation_error', 'message': str(e)}), 422
     except Exception as e:
-        current_app.logger.error(f'Erro ao processar planilha: {e}', exc_info=True)
-        return jsonify({
-            'success': False, 'error': 'processing_error',
-            'message': 'Erro ao processar a planilha. Verifique o formato do arquivo.'
-        }), 500
+        current_app.logger.error('Erro ao processar planilha: %s', e, exc_info=True)
+        return jsonify({'success': False, 'error': 'processing_error',
+                        'message': f'Erro ao processar a planilha: {str(e)}'}), 500
     finally:
         _cleanup_file(excel_path)
 
 
-# ---------------------------------------------------------------------------
-# POST /api/kmz/generate  -- aceita multipart Excel OU JSON {sites}
-# ---------------------------------------------------------------------------
+# =====================================================================
+# POST /api/kmz/generate  — multipart Excel OU JSON {sites}
+# =====================================================================
+
+def _has_excel_upload():
+    return ('excel_file' in request.files
+            and request.files.get('excel_file')
+            and request.files['excel_file'].filename != '')
+
+
+def _read_show_sectors():
+    form_val = (request.form or {}).get('show_sectors', '')
+    return form_val.lower() == 'true'
+
 
 @kmz_bp.route('/generate', methods=['POST'])
 def generate_kmz():
-    show_sectors = request.form.get('show_sectors', 'false').lower() == 'true' \
-        if request.form else request.get_json(silent=True) is None
+    if _has_excel_upload():
+        return _generate_kmz_from_excel()
+    return _generate_kmz_from_json()
 
-    if 'excel_file' in request.files and request.files['excel_file'].filename != '':
-        file = request.files['excel_file']
-        if not _allowed_file(file.filename):
-            return jsonify({
-                'success': False, 'error': 'invalid_file_type',
-                'message': f'Extensões aceitas: {", ".join(current_app.config["ALLOWED_EXTENSIONS"])}'
-            }), 400
 
-        excel_path = None
-        try:
-            excel_path = _save_uploaded_file(file)
-            df = parse_excel(excel_path)
-            sites = _dataframe_to_sites(df)
+def _generate_kmz_from_excel():
+    file = request.files['excel_file']
+    if not _allowed_file(file.filename):
+        return jsonify({'success': False, 'error': 'invalid_file_type',
+                        'message': f'Extensões aceitas: {", ".join(current_app.config["ALLOWED_EXTENSIONS"])}'}), 400
 
-            kmz_filename = f"torres_rf_{datetime.now().strftime('%Y%m%d_%H%M%S')}.kmz"
-            kmz_path = os.path.join(current_app.config['UPLOAD_FOLDER'], kmz_filename)
-            generate_tower_kmz(data=sites, output_path=kmz_path, show_sectors=show_sectors)
+    show_sectors = _read_show_sectors()
+    excel_path = None
+    try:
+        excel_path = _save_uploaded_file(file)
+        df = parse_excel(excel_path)
+        sites = _dataframe_to_sites(df)
 
-            current_app.logger.info('KMZ gerado via Excel: %s', kmz_filename)
-            return send_file(kmz_path,
-                             mimetype='application/vnd.google-earth.kmz',
-                             as_attachment=True,
-                             download_name=kmz_filename)
+        kmz_filename = f"torres_rf_{datetime.now().strftime('%Y%m%d_%H%M%S')}.kmz"
+        kmz_path = os.path.join(current_app.config['UPLOAD_FOLDER'], kmz_filename)
+        generate_tower_kmz(data=sites, output_path=kmz_path, show_sectors=show_sectors)
 
-        except ValueError as e:
-            return jsonify({'success': False, 'error': 'generation_error', 'message': str(e)}), 422
-        except Exception as e:
-            current_app.logger.error(f'Erro ao gerar KMZ: {e}', exc_info=True)
-            return jsonify({
-                'success': False, 'error': 'kmz_generation_error',
-                'message': 'Erro ao gerar o arquivo KMZ.'
-            }), 500
-        finally:
-            _cleanup_file(excel_path)
+        current_app.logger.info('KMZ gerado via Excel: %s (%d sites)', kmz_filename, len(sites))
+        return send_file(kmz_path,
+                         mimetype='application/vnd.google-earth.kmz',
+                         as_attachment=True,
+                         download_name=kmz_filename)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': 'generation_error', 'message': str(e)}), 422
+    except Exception as e:
+        current_app.logger.error('Erro ao gerar KMZ via Excel: %s', e, exc_info=True)
+        return jsonify({'success': False, 'error': 'kmz_generation_error',
+                        'message': f'Erro ao gerar o KMZ: {str(e)}'}), 500
+    finally:
+        _cleanup_file(excel_path)
 
+
+def _generate_kmz_from_json():
     body = request.get_json(silent=True)
     if not body or 'sites' not in body:
-        return jsonify({
-            'success': False, 'error': 'missing_data',
-            'message': 'Envie um arquivo Excel (multipart/form-data com campo "excel_file") ou '
-                       'JSON com lista de "sites".'
-        }), 400
+        return jsonify({'success': False, 'error': 'missing_data',
+                        'message': 'Envie um Excel (multipart) com campo "excel_file" ou JSON com "sites".'}), 400
 
-    sites = body['sites']
+    sites = body.get('sites', [])
     show_sectors = body.get('show_sectors', False)
 
     if not isinstance(sites, list) or len(sites) == 0:
-        return jsonify({
-            'success': False, 'error': 'invalid_sites',
-            'message': 'A lista de sites está vazia ou é inválida.'
-        }), 400
+        return jsonify({'success': False, 'error': 'invalid_sites',
+                        'message': 'Lista de sites vazia ou inválida.'}), 400
 
     try:
         kmz_filename = f"torres_rf_{datetime.now().strftime('%Y%m%d_%H%M%S')}.kmz"
@@ -243,85 +270,82 @@ def generate_kmz():
                          mimetype='application/vnd.google-earth.kmz',
                          as_attachment=True,
                          download_name=kmz_filename)
-
     except ValueError as e:
         return jsonify({'success': False, 'error': 'generation_error', 'message': str(e)}), 422
     except Exception as e:
-        current_app.logger.error(f'Erro ao gerar KMZ: {e}', exc_info=True)
-        return jsonify({
-            'success': False, 'error': 'kmz_generation_error',
-            'message': 'Erro ao gerar o arquivo KMZ.'
-        }), 500
+        current_app.logger.error('Erro ao gerar KMZ via JSON: %s', e, exc_info=True)
+        return jsonify({'success': False, 'error': 'kmz_generation_error',
+                        'message': f'Erro ao gerar o KMZ: {str(e)}'}), 500
 
 
-# ---------------------------------------------------------------------------
-# POST /api/kmz/preview  -- aceita Excel OU JSON {sites}
-# ---------------------------------------------------------------------------
+# =====================================================================
+# POST /api/kmz/preview  — multipart Excel OU JSON {sites}
+# =====================================================================
 
 @kmz_bp.route('/preview', methods=['POST'])
 def preview_sites():
-    if 'excel_file' in request.files and request.files['excel_file'].filename != '':
-        file = request.files['excel_file']
-        if not _allowed_file(file.filename):
-            return jsonify({
-                'success': False, 'error': 'invalid_file_type',
-                'message': f'Extensões aceitas: {", ".join(current_app.config["ALLOWED_EXTENSIONS"])}'
-            }), 400
+    if _has_excel_upload():
+        return _preview_from_excel()
+    return _preview_from_json()
 
-        excel_path = None
-        try:
-            excel_path = _save_uploaded_file(file)
-            df = parse_excel(excel_path)
-            stations = group_by_station(df)
-            sites = _dataframe_to_sites(df)
 
-            technologies = sorted(set(s.get('technology', '?') for s in sites))
-            operators = sorted(set(s.get('operadora', '?') for s in sites))
+def _preview_from_excel():
+    file = request.files['excel_file']
+    if not _allowed_file(file.filename):
+        return jsonify({'success': False, 'error': 'invalid_file_type',
+                        'message': f'Extensões aceitas: {", ".join(current_app.config["ALLOWED_EXTENSIONS"])}'}), 400
 
-            stations_sample = []
-            for st_id, info in list(stations.items())[:5]:
-                stations_sample.append({
-                    'id': st_id,
-                    'lat': info['info'].get('Latitude', info['info'].get('latitude', 0)),
-                    'lon': info['info'].get('Longitude', info['info'].get('longitude', 0)),
-                    'sectors': len(info['sectors']),
-                    'endereco': str(info['info'].get('EnderecoEstacao', info['info'].get('endereco', ''))),
-                })
+    excel_path = None
+    try:
+        excel_path = _save_uploaded_file(file)
+        df = parse_excel(excel_path)
+        stations = group_by_station(df)
+        sites = _dataframe_to_sites(df)
 
-            return jsonify({
-                'success': True,
-                'data': {
-                    'total_stations': len(stations),
-                    'total_sectors': len(sites),
-                    'operators': operators,
-                    'technologies': technologies,
-                    'stations_sample': stations_sample,
-                    'bounds': _calculate_bounds(sites),
-                }
-            }), 200
+        technologies = sorted(set(s.get('technology', '?') for s in sites))
+        operators = sorted(set(s.get('operadora', '?') for s in sites))
 
-        except ValueError as e:
-            return jsonify({'success': False, 'error': 'validation_error', 'message': str(e)}), 422
-        except Exception as e:
-            current_app.logger.error(f'Erro no preview: {e}', exc_info=True)
-            return jsonify({'success': False, 'error': 'preview_error',
-                            'message': 'Erro ao gerar preview.'}), 500
-        finally:
-            _cleanup_file(excel_path)
+        stations_sample = []
+        for st_id, info in list(stations.items())[:5]:
+            stations_sample.append({
+                'id': st_id,
+                'lat': _safe_float(info.get('info', {}).get('Latitude', info.get('info', {}).get('latitude', 0)), 0),
+                'lon': _safe_float(info.get('info', {}).get('Longitude', info.get('info', {}).get('longitude', 0)), 0),
+                'sectors': len(info.get('sectors', [])),
+                'endereco': str(info.get('info', {}).get('EnderecoEstacao', info.get('info', {}).get('endereco', ''))),
+            })
 
+        return jsonify({
+            'success': True,
+            'data': {
+                'total_stations': len(stations),
+                'total_sectors': len(sites),
+                'operators': operators,
+                'technologies': technologies,
+                'stations_sample': stations_sample,
+                'bounds': _calculate_bounds(sites),
+            }
+        }), 200
+    except ValueError as e:
+        return jsonify({'success': False, 'error': 'validation_error', 'message': str(e)}), 422
+    except Exception as e:
+        current_app.logger.error('Erro no preview via Excel: %s', e, exc_info=True)
+        return jsonify({'success': False, 'error': 'preview_error',
+                        'message': f'Erro ao processar a planilha: {str(e)}'}), 500
+    finally:
+        _cleanup_file(excel_path)
+
+
+def _preview_from_json():
     body = request.get_json(silent=True)
     if not body or 'sites' not in body:
-        return jsonify({
-            'success': False, 'error': 'missing_data',
-            'message': 'Envie um arquivo Excel (multipart) ou JSON com "sites".'
-        }), 400
+        return jsonify({'success': False, 'error': 'missing_data',
+                        'message': 'Envie um Excel (multipart) ou JSON com "sites".'}), 400
 
     sites = body['sites']
     if not isinstance(sites, list) or len(sites) == 0:
-        return jsonify({
-            'success': False, 'error': 'invalid_sites',
-            'message': 'A lista de sites está vazia ou é inválida.'
-        }), 400
+        return jsonify({'success': False, 'error': 'invalid_sites',
+                        'message': 'Lista de sites vazia ou inválida.'}), 400
 
     technologies = sorted(set(s.get('technology', s.get('tecnologia', '?')) for s in sites))
     operators = sorted(set(s.get('operadora', s.get('name', '?')) for s in sites))
@@ -348,9 +372,9 @@ def preview_sites():
     }), 200
 
 
-# ---------------------------------------------------------------------------
+# =====================================================================
 # GET /api/kmz/template
-# ---------------------------------------------------------------------------
+# =====================================================================
 
 TEMPLATE_COLUMNS = [
     "Torre Estação", "Numero Estacao", "EnderecoEstacao", "SiglaUf",
@@ -454,19 +478,16 @@ def download_template():
     return resp
 
 
-# ---------------------------------------------------------------------------
+# =====================================================================
 # POST /api/kmz/coverage
-# ---------------------------------------------------------------------------
+# =====================================================================
 
 @kmz_bp.route('/coverage', methods=['POST'])
 def generate_coverage():
     body = request.get_json(silent=True)
-
     if not body or 'stations' not in body:
-        return jsonify({
-            'success': False, 'error': 'missing_data',
-            'message': 'O corpo da requisição deve conter uma lista de "stations".'
-        }), 400
+        return jsonify({'success': False, 'error': 'missing_data',
+                        'message': 'Forneça uma lista de "stations".'}), 400
 
     stations = body['stations']
     show_labels = body.get('show_labels', True)
@@ -474,12 +495,9 @@ def generate_coverage():
     show_sector_arrows = body.get('show_sector_arrows', False)
 
     if not isinstance(stations, list) or len(stations) == 0:
-        return jsonify({
-            'success': False, 'error': 'invalid_stations',
-            'message': 'A lista de estações está vazia ou é inválida.'
-        }), 400
+        return jsonify({'success': False, 'error': 'invalid_stations',
+                        'message': 'Lista de estações vazia ou inválida.'}), 400
 
-    kmz_path = None
     try:
         kmz_filename = f"cobertura_rf_{datetime.now().strftime('%Y%m%d_%H%M%S')}.kmz"
         kmz_path = os.path.join(current_app.config['UPLOAD_FOLDER'], kmz_filename)
@@ -492,16 +510,13 @@ def generate_coverage():
         )
 
         current_app.logger.info('KMZ de cobertura gerado: %s', kmz_filename)
-        return send_file(kmz_pathf,
+        return send_file(kmz_path,
                          mimetype='application/vnd.google-earth.kmz',
                          as_attachment=True,
                          download_name=kmz_filename)
-
     except ValueError as e:
         return jsonify({'success': False, 'error': 'coverage_error', 'message': str(e)}), 422
     except Exception as e:
-        current_app.logger.error(f'Erro ao gerar KMZ de cobertura: {e}', exc_info=True)
-        return jsonify({
-            'success': False, 'error': 'coverage_generation_error',
-            'message': 'Erro ao gerar o KMZ de cobertura RF.'
-        }), 500
+        current_app.logger.error('Erro ao gerar KMZ de cobertura: %s', e, exc_info=True)
+        return jsonify({'success': False, 'error': 'coverage_generation_error',
+                        'message': f'Erro ao gerar o KMZ de cobertura: {str(e)}'}), 500
