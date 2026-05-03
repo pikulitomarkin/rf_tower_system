@@ -75,7 +75,7 @@ def _convert_types(df: pd.DataFrame) -> pd.DataFrame:
     for col in INT_COLUMNS:
         if col in df.columns:
             numeric_series = pd.to_numeric(df[col], errors="coerce")
-            df[col] = numeric_series.astype("Int64")
+            df[col] = numeric_series.round(0).astype("Int64")
 
     for col in STR_COLUMNS:
         if col in df.columns:
