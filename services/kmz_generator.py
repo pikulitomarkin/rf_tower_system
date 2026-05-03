@@ -285,6 +285,7 @@ def generate_tower_kmz(
     try:
         kml = simplekml.Kml(name="RF Tower System - ANATEL")
 
+        folder_cache: Dict[str, simplekml.Folder] = {}
         generated_icons: set[str] = set()
 
         for station_id, group in df.groupby("Numero Estacao"):
@@ -334,8 +335,15 @@ def generate_tower_kmz(
                     fh.write(icon_png)
                 generated_icons.add(icon_filename)
 
-            op_folder: simplekml.Folder = _get_or_create_folder(kml, operadora_key)
-            tech_folder: simplekml.Folder = _get_or_create_folder(op_folder, tech_primary)
+            op_cache_key = f"op:{operadora_key}"
+            if op_cache_key not in folder_cache:
+                folder_cache[op_cache_key] = kml.newfolder(name=operadora_key)
+            op_folder = folder_cache[op_cache_key]
+
+            tech_cache_key = f"tech:{operadora_key}:{tech_primary}"
+            if tech_cache_key not in folder_cache:
+                folder_cache[tech_cache_key] = op_folder.newfolder(name=tech_primary)
+            tech_folder = folder_cache[tech_cache_key]
 
             placemark_name = f"#{station_id_str} - {endereco}"
             pnt = tech_folder.newpoint(name=placemark_name, coords=[(lon, lat, altura)])
@@ -352,6 +360,7 @@ def generate_tower_kmz(
                 arrows_folder: simplekml.Folder = tech_folder.newfolder(name=arrows_folder_name)
                 add_sector_arrows(arrows_folder, station_id_str, sectors, lat, lon)
 
+        logger.info("KML construído com %d folders únicos, salvando...", len(folder_cache))
         kml_path = os.path.join(temp_dir, "doc.kml")
         kml.save(kml_path)
 
@@ -369,14 +378,3 @@ def generate_tower_kmz(
         raise
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-def _get_or_create_folder(parent, name: str) -> simplekml.Folder:
-    candidate = getattr(parent, "folders", {})
-    if callable(candidate):
-        candidate = candidate()
-    if isinstance(candidate, dict):
-        for folder in candidate.values():
-            if hasattr(folder, "name") and folder.name == name:
-                return folder
-    return parent.newfolder(name=name)
